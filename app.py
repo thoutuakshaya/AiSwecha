@@ -2,17 +2,17 @@ import streamlit as st
 from utils.db import init_db, insert_tip, get_all_tips, upvote_tip
 from utils.translator import translate_text
 from utils.voice import recognize_voice
+import speech_recognition as sr
 
 st.set_page_config(page_title="Health Tips App", layout="centered")
 
 # Initialize the database
 init_db()
 
-# Initialize session state for voice transcription if not already present
+# Initialize session state
 if "tip" not in st.session_state:
     st.session_state["tip"] = ""
 
-# Supported voice input languages
 voice_lang = st.selectbox("🎙️ Select Voice Language", [
     ("Telugu", "te-IN"),
     ("Hindi", "hi-IN"),
@@ -21,11 +21,11 @@ voice_lang = st.selectbox("🎙️ Select Voice Language", [
     ("Tamil", "ta-IN"),
 ], format_func=lambda x: x[0])
 
-st.title("🩺 Lets share Health Tips")
+st.title("🩺 Let's Share Health Tips")
 
-# Tip submission section
+# Tip submission
 st.header("📝 Share Your Health Tip")
-input_method = st.radio("Choose input method:", ("Text", "Voice"))
+input_method = st.radio("Choose input method:", ("Text", "Voice (Record)", "Voice (Upload)"))
 
 tip = ""
 
@@ -33,11 +33,32 @@ if input_method == "Text":
     st.session_state["tip"] = st.text_area("Enter your health tip (in any language)", height=100)
     tip = st.session_state["tip"]
 
-elif input_method == "Voice":
-    if st.button("🎙️ Record Voice"):
-        with st.spinner("Recording... Speak now!"):
-            text = recognize_voice(language=voice_lang[1])
-        st.session_state["tip"] = text or ""
+elif input_method == "Voice (Record)":
+    st.warning("⚠️ Live voice input is not supported on this platform. Please upload a file instead.")
+    # Optionally disable or fallback if deployed
+    # Uncomment below if running locally only
+    # if st.button("🎙️ Record Voice"):
+    #     with st.spinner("Recording... Speak now!"):
+    #         try:
+    #             text = recognize_voice(language=voice_lang[1])
+    #             st.session_state["tip"] = text or ""
+    #         except Exception as e:
+    #             st.error(f"Error: {e}")
+    st.text_area("🎧 Transcribed Voice Tip:", value=st.session_state["tip"], height=100)
+    tip = st.session_state["tip"]
+
+elif input_method == "Voice (Upload)":
+    audio_file = st.file_uploader("Upload a voice file (WAV/MP3)", type=["wav", "mp3", "ogg"])
+    if audio_file:
+        recognizer = sr.Recognizer()
+        try:
+            with sr.AudioFile(audio_file) as source:
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data, language=voice_lang[1])
+                st.session_state["tip"] = text
+                st.success("🎉 Transcription successful!")
+        except Exception as e:
+            st.error(f"❌ Could not transcribe audio: {e}")
     st.text_area("🎧 Transcribed Voice Tip:", value=st.session_state["tip"], height=100)
     tip = st.session_state["tip"]
 
@@ -46,15 +67,14 @@ if st.button("✅ Submit Tip"):
     if st.session_state["tip"].strip():
         insert_tip(st.session_state["tip"].strip())
         st.success("✅ Health tip submitted successfully!")
-        st.session_state["tip"] = ""  # clear input after submit
+        st.session_state["tip"] = ""
     else:
         st.warning("⚠️ Please enter or record a tip before submitting.")
 
-# Display all community tips
+# Show tips
 st.header("📚 Community Tips")
 all_tips = get_all_tips()
 
-# Language code mapping for translation
 lang_code_map = {
     "Telugu": "te-IN",
     "Hindi": "hi-IN",
