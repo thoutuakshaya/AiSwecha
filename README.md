@@ -1,1 +1,2 @@
-# AiSwecha
+# AI swecha
+Summer of AI internship
