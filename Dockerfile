@@ -4,7 +4,9 @@ FROM python:3.10-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         portaudio19-dev ffmpeg build-essential curl git && \
+    ffmpeg portaudio19-dev build-essential curl git && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Set working directory
 WORKDIR /app
