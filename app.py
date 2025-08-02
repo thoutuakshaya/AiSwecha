@@ -102,4 +102,5 @@ for idx, (tip_id, user_input, bot_response, timestamp, upvotes) in enumerate(all
             if st.button("👍 Upvote", key=f"upvote_{tip_id}"):
                 upvote_tip(tip_id)
                 st.success("🙏 You supported this tip!")
-                st.rerun() edhit this only add above feature
+                st.rerun() 
+
