@@ -1,71 +1,105 @@
 import streamlit as st
+from utils.db import init_db, insert_tip, get_all_tips, upvote_tip
+from utils.translator import translate_text
+from utils.voice import recognize_voice
 import speech_recognition as sr
-from pydub import AudioSegment
-import tempfile
-import os
 
-# Title
-st.title("AI Health Bot")
+st.set_page_config(page_title="Health Tips App", layout="centered")
 
-# Input Method Selection
-input_method = st.selectbox("Select input method", ["Text", "Voice (Mic)", "Voice (Upload)"])
+# Initialize the database
+init_db()
 
-def recognize_voice_from_mic(language="en-IN"):
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("Listening... Speak now.")
-        audio = recognizer.listen(source)
-    try:
-        text = recognizer.recognize_google(audio, language=language)
-        return text
-    except Exception as e:
-        st.error(f"❌ Could not recognize speech: {e}")
-        return None
+# Initialize session state
+if "tip" not in st.session_state:
+    st.session_state["tip"] = ""
 
-def recognize_voice_from_file(uploaded_file, language="en-IN"):
-    try:
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_ogg:
-            tmp_ogg.write(uploaded_file.read())
-            tmp_ogg_path = tmp_ogg.name
+voice_lang = st.selectbox("🎙️ Select Voice Language", [
+    ("Telugu", "te-IN"),
+    ("Hindi", "hi-IN"),
+    ("English", "en-GB"),
+    ("Kannada", "kn-IN"),
+    ("Tamil", "ta-IN"),
+], format_func=lambda x: x[0])
 
-        # Convert OGG to WAV using pydub
-        sound = AudioSegment.from_ogg(tmp_ogg_path)
-        wav_path = tmp_ogg_path.replace(".ogg", ".wav")
-        sound.export(wav_path, format="wav")
+st.title("🩺 Let's Share Health Tips")
 
-        # Recognize using speech_recognition
-        recognizer = sr.Recognizer()
-        with sr.AudioFile(wav_path) as source:
-            audio = recognizer.record(source)
-        text = recognizer.recognize_google(audio, language=language)
+# Tip submission
+st.header("📝 Share Your Health Tip")
+input_method = st.radio("Choose input method:", ("Text", "Voice (Record)", "Voice (Upload)"))
 
-        # Clean up
-        os.remove(tmp_ogg_path)
-        os.remove(wav_path)
+tip = ""
 
-        return text
-    except Exception as e:
-        st.error(f"❌ Could not transcribe audio: {e}")
-        return None
-
-# Main Logic
 if input_method == "Text":
-    user_input = st.text_input("Enter your health question here:")
-elif input_method == "Voice (Mic)":
-    if st.button("Start Recording"):
-        user_input = recognize_voice_from_mic()
-elif input_method == "Voice (Upload)":
-    uploaded_audio = st.file_uploader("Upload an audio file (.ogg)", type=["ogg"])
-    if uploaded_audio is not None:
-        user_input = recognize_voice_from_file(uploaded_audio)
-    else:
-        user_input = None
-else:
-    user_input = None
+    st.session_state["tip"] = st.text_area("Enter your health tip (in any language)", height=100)
+    tip = st.session_state["tip"]
 
-# Display user input
-if user_input:
-    st.success(f"Recognized Input: {user_input}")
-    # Here, send user_input to your AI model and show response
-    st.write("🤖 (Model Response Placeholder)")
+elif input_method == "Voice (Record)":
+    st.warning("⚠️ Live voice input is not supported on this platform. Please upload a file instead.")
+    # Optionally disable or fallback if deployed
+    # Uncomment below if running locally only
+    # if st.button("🎙️ Record Voice"):
+    #     with st.spinner("Recording... Speak now!"):
+    #         try:
+    #             text = recognize_voice(language=voice_lang[1])
+    #             st.session_state["tip"] = text or ""
+    #         except Exception as e:
+    #             st.error(f"Error: {e}")
+    st.text_area("🎧 Transcribed Voice Tip:", value=st.session_state["tip"], height=100)
+    tip = st.session_state["tip"]
+
+elif input_method == "Voice (Upload)":
+    audio_file = st.file_uploader("Upload a voice file (WAV/MP3)", type=["wav", "mp3", "ogg"])
+    if audio_file:
+        recognizer = sr.Recognizer()
+        try:
+            with sr.AudioFile(audio_file) as source:
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data, language=voice_lang[1])
+                st.session_state["tip"] = text
+                st.success("🎉 Transcription successful!")
+        except Exception as e:
+            st.error(f"❌ Could not transcribe audio: {e}")
+    st.text_area("🎧 Transcribed Voice Tip:", value=st.session_state["tip"], height=100)
+    tip = st.session_state["tip"]
+
+# Submit the tip
+if st.button("✅ Submit Tip"):
+    if st.session_state["tip"].strip():
+        insert_tip(st.session_state["tip"].strip())
+        st.success("✅ Health tip submitted successfully!")
+        st.session_state["tip"] = ""
+    else:
+        st.warning("⚠️ Please enter or record a tip before submitting.")
+
+# Show tips
+st.header("📚 Community Tips")
+all_tips = get_all_tips()
+
+lang_code_map = {
+    "Telugu": "te-IN",
+    "Hindi": "hi-IN",
+    "English": "en-GB",
+    "Kannada": "kn-IN",
+    "Tamil": "ta-IN",
+}
+
+for idx, (tip_id, user_input, bot_response, timestamp, upvotes) in enumerate(all_tips):
+    with st.expander(f"💡 Tip #{idx + 1} (👍 {upvotes} votes)"):
+        st.write(f"🗒️ Original Tip:\n\n{user_input}")
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            lang = st.selectbox(
+                "🌐 Translate to:",
+                ["Telugu", "Hindi", "English", "Kannada", "Tamil"],
+                key=f"lang_{idx}"
+            )
+            if st.button("🌐 Translate", key=f"translate_{idx}"):
+                translated = translate_text(user_input, lang)
+                st.markdown(f"🔤 **Translated Tip:**\n\n{translated}")
+
+        with col2:
+            if st.button("👍 Upvote", key=f"upvote_{tip_id}"):
+                upvote_tip(tip_id)
+                st.success("🙏 You supported this tip!")
+                st.rerun() edhit this only add above feature
