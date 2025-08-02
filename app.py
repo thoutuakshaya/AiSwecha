@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.db import init_db, insert_tip, get_all_tips, upvote_tip
 from utils.translator import translate_text
-from utils.voice import recognize_voice
+from utils.voice import recognize_voice, speak_text
 import speech_recognition as sr
 from pydub import AudioSegment
 import tempfile
@@ -223,6 +223,7 @@ for idx, (tip_id, user_input, bot_response, timestamp, upvotes) in enumerate(all
 #                 upvote_tip(tip_id)
 #                 st.success("🙏 You supported this tip!")
 #                 st.rerun() 
+
 
 
 
